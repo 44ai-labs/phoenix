@@ -1077,8 +1077,10 @@ def _(element: Any, compiler: Any, **kw: Any) -> Any:
 @compiles(TextContains, "postgresql")
 def _(element: Any, compiler: Any, **kw: Any) -> Any:
     # See https://docs.sqlalchemy.org/en/20/core/compiler.html
+    # Use LIKE instead of strpos() so that a pg_trgm GIN index on the column
+    # can be used for substring searches (strpos is not accelerated by pg_trgm).
     string, substring = list(element.clauses)
-    return compiler.process(func.strpos(string, substring) > 0, **kw)
+    return compiler.process(string.contains(substring), **kw)
 
 
 @compiles(TextContains, "sqlite")
