@@ -24,6 +24,11 @@ import { LLMPromptTemplate } from "./LLMPromptTemplate";
 import { LLMToolSchemasList } from "./LLMToolSchemasList";
 import { MimeTypeCodeBlock } from "./MimeTypeCodeBlock";
 import type { SpanIOValue } from "./types";
+import {
+  formatJSONForCopy,
+  formatJSONStringsForCopy,
+  formatTextListForCopy,
+} from "./utils";
 
 /**
  * The input side of an LLM span — the model card with a view select for
@@ -93,6 +98,9 @@ export function LLMInput({
         {...defaultCardProps}
         defaultOpen={false}
         title="Prompt Template"
+        extra={
+          <CopyToClipboardButton text={formatJSONForCopy(promptTemplate)} />
+        }
       >
         <LLMPromptTemplate promptTemplate={promptTemplate} />
       </Card>
@@ -108,6 +116,24 @@ export function LLMInput({
   const isRawView = view === "input" && hasInput;
   const cardProps = useSpanInfoCardProps("input");
 
+  // Whatever the card is showing is what its copy button copies, so the reader
+  // never has to switch views to get at the content in front of them
+  let copyText: string | null = null;
+  switch (view) {
+    case "input-messages":
+      copyText = formatJSONForCopy(inputMessages);
+      break;
+    case "tools":
+      copyText = formatJSONStringsForCopy(toolSchemas);
+      break;
+    case "input":
+      copyText = input?.value ?? null;
+      break;
+    case "prompts":
+      copyText = formatTextListForCopy(prompts);
+      break;
+  }
+
   return (
     <MarkdownDisplayProvider>
       <Card
@@ -117,12 +143,6 @@ export function LLMInput({
         subTitle={modelNameEl}
         extra={
           <Flex direction="row" gap="size-100" alignItems="center">
-            {isRawView && (
-              <>
-                <ConnectedMarkdownModeSelect />
-                <CopyToClipboardButton text={input.value} />
-              </>
-            )}
             {views.length > 0 && (
               <LLMIOViewSelect
                 label="Input view"
@@ -131,6 +151,10 @@ export function LLMInput({
                 onChange={setView}
               />
             )}
+            {isRawView && <ConnectedMarkdownModeSelect />}
+            {/* copy sits last in every card header, so it is always in the same
+                place no matter which controls the card has */}
+            {copyText != null && <CopyToClipboardButton text={copyText} />}
           </Flex>
         }
       >
