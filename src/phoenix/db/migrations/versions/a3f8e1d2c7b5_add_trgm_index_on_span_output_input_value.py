@@ -41,12 +41,13 @@ passes Postgres must make and typically cuts build time by 30-50 % on
 tables where the default 128 MB causes multiple merge passes. The
 setting is restored afterward and has no effect on normal queries.
 
-CONCURRENTLY support (opt-in via PHOENIX_MIGRATE_INDEX_CONCURRENTLY=true)
---------------------------------------------------------------------------
-CREATE INDEX CONCURRENTLY cannot run inside a transaction. The workaround
-is identical to the one used in f1a6b2f0c9d5: commit the current
-transaction and enable autocommit at the DBAPI level before issuing the
-DDL, then restore transactional mode afterward.
+CONCURRENTLY support (opt-in via PHOENIX_ACTIVATE_FAST_FULL_TEXT_SEARCH_PSQL=true)
+----------------------------------------------------------------------------------
+When PHOENIX_ACTIVATE_FAST_FULL_TEXT_SEARCH_PSQL=true the index build uses
+CREATE INDEX CONCURRENTLY, which cannot run inside a transaction. The workaround
+is identical to the one used in f1a6b2f0c9d5: commit the current transaction and
+enable autocommit at the DBAPI level before issuing the DDL, then restore
+transactional mode afterward.
 
 Tradeoffs:
 - CONCURRENTLY avoids an exclusive write lock during the build, which
@@ -104,7 +105,7 @@ def _is_postgresql() -> bool:
 def _use_concurrently() -> bool:
     if not _is_postgresql():
         return False
-    return os.environ.get("PHOENIX_MIGRATE_INDEX_CONCURRENTLY", "").lower() == "true"
+    return os.environ.get("PHOENIX_ACTIVATE_FAST_FULL_TEXT_SEARCH_PSQL", "").lower() == "true"
 
 
 def _enable_autocommit() -> None:
