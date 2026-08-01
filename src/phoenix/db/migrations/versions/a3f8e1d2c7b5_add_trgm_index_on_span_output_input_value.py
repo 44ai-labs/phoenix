@@ -56,7 +56,6 @@ import os
 from typing import Sequence, Union
 
 from alembic import op
-from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "a3f8e1d2c7b5"
@@ -75,20 +74,20 @@ def upgrade() -> None:
     if not _is_active():
         return
 
-    op.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-    op.execute(text(
+    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    op.execute(
         "CREATE INDEX IF NOT EXISTS ix_spans_output_value_trgm "
         "ON spans USING GIN ((attributes #>> '{output,value}') gin_trgm_ops)"
-    ))
-    op.execute(text(
+    )
+    op.execute(
         "CREATE INDEX IF NOT EXISTS ix_spans_input_value_trgm "
         "ON spans USING GIN ((attributes #>> '{input,value}') gin_trgm_ops)"
-    ))
+    )
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
 
-    op.execute(text("DROP INDEX IF EXISTS ix_spans_output_value_trgm"))
-    op.execute(text("DROP INDEX IF EXISTS ix_spans_input_value_trgm"))
+    op.drop_index("ix_spans_output_value_trgm", table_name="spans", if_exists=True)
+    op.drop_index("ix_spans_input_value_trgm", table_name="spans", if_exists=True)
