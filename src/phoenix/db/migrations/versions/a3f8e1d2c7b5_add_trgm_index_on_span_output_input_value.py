@@ -30,9 +30,11 @@ Build time
 ----------
 GIN trigram indexes are expensive to build on large tables because every
 character in every stored value is decomposed into trigrams. LLM output
-and input values can be several kilobytes each.
+and input values can be several kilobytes each. Because Alembic runs
+synchronously before Phoenix starts accepting connections, a long build
+means Phoenix is unavailable for that duration.
 
-Rough wall-clock estimates (Postgres 16, 8-core VM):
+Rough wall-clock estimates (Postgres 16, 8-core VM, default settings):
 
   rows     avg value size   build time
   -------  ---------------  ----------
@@ -40,8 +42,6 @@ Rough wall-clock estimates (Postgres 16, 8-core VM):
     1 M    2 KB             ~10-30 min
    10 M    2 KB             ~2-4 h
 
-Because Alembic runs synchronously before Phoenix starts accepting
-connections, a long build means Phoenix is unavailable for that duration.
 Operators upgrading a large installation can pre-create the indexes
 manually before upgrading (the migration skips via IF NOT EXISTS):
 
@@ -64,12 +64,6 @@ down_revision: Union[str, None] = "d4e5f6a7b8c9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# Raised from the Postgres default (128 MB) to reduce sort passes during the
-# GIN trigram build. LLM output/input values can be several KB each, so the
-# default is often insufficient for a single-pass build on moderate tables.
-_MAINTENANCE_WORK_MEM = "512 MB"
-
-
 def _is_active() -> bool:
     return (
         op.get_bind().dialect.name == "postgresql"
@@ -82,18 +76,14 @@ def upgrade() -> None:
         return
 
     op.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-    op.execute(text(f"SET maintenance_work_mem = '{_MAINTENANCE_WORK_MEM}'"))
-    try:
-        op.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_spans_output_value_trgm "
-            "ON spans USING GIN ((attributes #>> '{output,value}') gin_trgm_ops)"
-        ))
-        op.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_spans_input_value_trgm "
-            "ON spans USING GIN ((attributes #>> '{input,value}') gin_trgm_ops)"
-        ))
-    finally:
-        op.execute(text("RESET maintenance_work_mem"))
+    op.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_spans_output_value_trgm "
+        "ON spans USING GIN ((attributes #>> '{output,value}') gin_trgm_ops)"
+    ))
+    op.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_spans_input_value_trgm "
+        "ON spans USING GIN ((attributes #>> '{input,value}') gin_trgm_ops)"
+    ))
 
 
 def downgrade() -> None:
