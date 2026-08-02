@@ -14,6 +14,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import { graphql, usePaginationFragment } from "react-relay";
 import {
@@ -249,6 +250,7 @@ export function SpansTable(props: SpansTableProps) {
     }
     didSyncAsideFromStoreRef.current = true;
   }, [showTableAside]);
+  const [isRefetching, startRefetchTransition] = useTransition();
   const { data, loadNext, hasNext, isLoadingNext, refetch } =
     usePaginationFragment<SpansTableSpansQuery, SpansTable_spans$key>(
       graphql`
@@ -788,7 +790,7 @@ export function SpansTable(props: SpansTableProps) {
       return;
     }
     //if the sorting changes, we need to reset the pagination
-    startTransition(() => {
+    startRefetchTransition(() => {
       const sort = sorting[0];
       refetch(
         {
@@ -912,7 +914,10 @@ export function SpansTable(props: SpansTableProps) {
               width="100%"
               alignItems="center"
             >
-              <SpanFilterConditionField onValidCondition={setFilterCondition} />
+              <SpanFilterConditionField
+                onValidCondition={setFilterCondition}
+                isLoading={isRefetching}
+              />
 
               <ToggleButtonGroup
                 aria-label="Toggle between root and all spans"

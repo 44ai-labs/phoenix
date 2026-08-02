@@ -97,6 +97,9 @@ const enterHintCSS = css`
 `;
 
 const activeBadgeCSS = css`
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 500;
   color: var(--global-color-primary-700);
@@ -106,6 +109,32 @@ const activeBadgeCSS = css`
   margin-right: var(--global-dimension-static-size-50);
   white-space: nowrap;
   pointer-events: none;
+  max-width: 200px;
+  overflow: hidden;
+`;
+
+const badgeLabelCSS = css`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const badgeDurationCSS = css`
+  opacity: 0.7;
+  flex-shrink: 0;
+`;
+
+const spinnerCSS = css`
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--global-color-primary-300);
+  border-top-color: var(--global-color-primary-700);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 `;
 
 function filterConditionCompletions(
@@ -252,16 +281,16 @@ const basicSetupOptions: BasicSetupOptions = {
 };
 
 type SpanFilterConditionFieldProps = {
-  /**
-   * Callback when the condition is valid
-   */
   onValidCondition: (condition: string) => void;
   placeholder?: string;
+  /** True while the parent is fetching results for the committed condition */
+  isLoading?: boolean;
 };
 export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
   const {
     onValidCondition,
     placeholder = "filter condition (e.x. span_kind == 'LLM')",
+    isLoading = false,
   } = props;
   const [isFocused, setIsFocused] = useState<boolean>(false);
   const [isConditionValidState, setIsConditionValidState] =
@@ -279,6 +308,8 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
 
   // What was last submitted — drives the "active" indicator
   const [committedCondition, setCommittedCondition] = useState<string>("");
+  const [searchDuration, setSearchDuration] = useState<string | null>(null);
+  const searchStartTimeRef = useRef<number | null>(null);
 
   // Refs so the stable keymap extension can always see current values
   const filterConditionRef = useRef(filterCondition);
@@ -299,6 +330,7 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
           run: (_editorView: EditorView) => {
             if (isValidRef.current) {
               const condition = filterConditionRef.current;
+              searchStartTimeRef.current = performance.now();
               setCommittedConditionRef.current(condition);
               startTransition(() => {
                 onValidConditionRef.current(condition);
@@ -374,12 +406,24 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
   useEffect(() => {
     if (filterCondition === "" && prevFilterConditionRef.current !== "") {
       setCommittedCondition("");
+      setSearchDuration(null);
       startTransition(() => {
         onValidCondition("");
       });
     }
     prevFilterConditionRef.current = filterCondition;
   }, [filterCondition, onValidCondition]);
+
+  // When isLoading transitions false → true → false, record the duration.
+  const prevIsLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    if (prevIsLoadingRef.current && !isLoading && searchStartTimeRef.current !== null) {
+      const ms = Math.round(performance.now() - searchStartTimeRef.current);
+      setSearchDuration(ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
+      searchStartTimeRef.current = null;
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   const hasError = errorMessage !== "";
   const hasCondition = filterCondition !== "";
@@ -415,7 +459,13 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
           <span css={enterHintCSS}>↵ to search</span>
         )}
         {isSearchActive && !isPending && (
-          <span css={activeBadgeCSS}>active</span>
+          <span css={activeBadgeCSS}>
+            {isLoading && <span css={spinnerCSS} />}
+            <span css={badgeLabelCSS}>{committedCondition}</span>
+            {!isLoading && searchDuration && (
+              <span css={badgeDurationCSS}>· {searchDuration}</span>
+            )}
+          </span>
         )}
         <button
           css={css`
