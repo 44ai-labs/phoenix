@@ -1079,10 +1079,19 @@ def _(element: Any, compiler: Any, **kw: Any) -> Any:
     # See https://docs.sqlalchemy.org/en/20/core/compiler.html
     # Use LIKE instead of strpos() so that a pg_trgm GIN index on the column
     # can be used for substring searches (strpos is not accelerated by pg_trgm).
-    # autoescape=True escapes LIKE metacharacters (%, _, \) in the search term
-    # so behavior is identical to strpos for all inputs.
+    # autoescape=True requires a Python string literal; substring is a bound
+    # parameter at compile time, so we escape LIKE metacharacters at the DB
+    # level using REPLACE. Semantics are identical to strpos for all inputs.
     string, substring = list(element.clauses)
-    return compiler.process(string.contains(substring, autoescape=True), **kw)
+    esc = "\\"
+    escaped = func.replace(
+        func.replace(
+            func.replace(substring, esc, esc + esc),
+            "%", esc + "%",
+        ),
+        "_", esc + "_",
+    )
+    return compiler.process(string.like(func.concat("%", escaped, "%"), escape=esc), **kw)
 
 
 @compiles(TextContains, "sqlite")
