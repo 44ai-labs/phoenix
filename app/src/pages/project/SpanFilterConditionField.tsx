@@ -74,10 +74,38 @@ const fieldCSS = css`
   &[data-is-invalid="true"] {
     border-color: var(--global-color-danger);
   }
+  &[data-is-active="true"] {
+    border-color: var(--global-color-primary-700);
+  }
+  &[data-is-active="true"]:hover,
+  &[data-is-active="true"][data-is-focused="true"] {
+    border-color: var(--global-color-primary-900);
+  }
   box-sizing: border-box;
   .search-icon {
     margin-left: var(--global-dimension-static-size-100);
   }
+`;
+
+const enterHintCSS = css`
+  font-size: 11px;
+  color: var(--global-text-color-500);
+  padding-right: var(--global-dimension-static-size-100);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.7;
+`;
+
+const activeBadgeCSS = css`
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--global-color-primary-700);
+  padding: 1px 6px;
+  border: 1px solid var(--global-color-primary-700);
+  border-radius: 10px;
+  margin-right: var(--global-dimension-static-size-50);
+  white-space: nowrap;
+  pointer-events: none;
 `;
 
 function filterConditionCompletions(
@@ -249,6 +277,9 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
 
   const filterConditionFieldRef = useRef<HTMLDivElement>(null);
 
+  // What was last submitted — drives the "active" indicator
+  const [committedCondition, setCommittedCondition] = useState<string>("");
+
   // Refs so the stable keymap extension can always see current values
   const filterConditionRef = useRef(filterCondition);
   filterConditionRef.current = filterCondition;
@@ -256,6 +287,8 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
   isValidRef.current = isConditionValidState;
   const onValidConditionRef = useRef(onValidCondition);
   onValidConditionRef.current = onValidCondition;
+  const setCommittedConditionRef = useRef(setCommittedCondition);
+  setCommittedConditionRef.current = setCommittedCondition;
 
   // Per-instance extensions: Enter commits the search, never inserts a newline
   const extensions = useMemo(
@@ -265,8 +298,10 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
           key: "Enter",
           run: (_editorView: EditorView) => {
             if (isValidRef.current) {
+              const condition = filterConditionRef.current;
+              setCommittedConditionRef.current(condition);
               startTransition(() => {
-                onValidConditionRef.current(filterConditionRef.current);
+                onValidConditionRef.current(condition);
               });
             }
             return true;
@@ -338,6 +373,7 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
   const prevFilterConditionRef = useRef(filterCondition);
   useEffect(() => {
     if (filterCondition === "" && prevFilterConditionRef.current !== "") {
+      setCommittedCondition("");
       startTransition(() => {
         onValidCondition("");
       });
@@ -347,10 +383,14 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
 
   const hasError = errorMessage !== "";
   const hasCondition = filterCondition !== "";
+  const isSearchActive = committedCondition !== "";
+  const isPending =
+    filterCondition.trim() !== "" && filterCondition !== committedCondition;
   return (
     <div
       data-is-focused={isFocused}
       data-is-invalid={hasError}
+      data-is-active={isSearchActive && !isPending}
       className="span-filter-condition-field"
       css={fieldCSS}
       ref={filterConditionFieldRef}
@@ -371,6 +411,12 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
           placeholder={placeholder}
           extensions={extensions}
         />
+        {isPending && isConditionValidState && (
+          <span css={enterHintCSS}>↵ to search</span>
+        )}
+        {isSearchActive && !isPending && (
+          <span css={activeBadgeCSS}>active</span>
+        )}
         <button
           css={css`
             margin-right: var(--global-dimension-static-size-100);
