@@ -206,16 +206,8 @@ function filterConditionCompletions(
   };
 }
 
-const extensions = [
-  keymap.of([
-    {
-      key: "Enter",
-      run: (_editorView: EditorView) => {
-        // Ignore newlines
-        return true;
-      },
-    },
-  ]),
+// Stable base — Enter keymap is wired per-instance via a ref (see below)
+const baseExtensions = [
   python(),
   autocompletion({ override: [filterConditionCompletions] }),
 ];
@@ -257,6 +249,35 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
 
   const filterConditionFieldRef = useRef<HTMLDivElement>(null);
 
+  // Refs so the stable keymap extension can always see current values
+  const filterConditionRef = useRef(filterCondition);
+  filterConditionRef.current = filterCondition;
+  const isValidRef = useRef(isConditionValidState);
+  isValidRef.current = isConditionValidState;
+  const onValidConditionRef = useRef(onValidCondition);
+  onValidConditionRef.current = onValidCondition;
+
+  // Per-instance extensions: Enter commits the search, never inserts a newline
+  const extensions = useMemo(
+    () => [
+      keymap.of([
+        {
+          key: "Enter",
+          run: (_editorView: EditorView) => {
+            if (isValidRef.current) {
+              startTransition(() => {
+                onValidConditionRef.current(filterConditionRef.current);
+              });
+            }
+            return true;
+          },
+        },
+      ]),
+      ...baseExtensions,
+    ],
+    [] // stable — current values read through refs
+  );
+
   const advertisedContext = useMemo<AgentContext | null>(() => {
     // Advertise a project context that carries the current spanFilter while
     // the field is mounted. The merge in `selectActiveContexts` layers this
@@ -282,6 +303,8 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
   // `SpanFiltersProvider`, which owns the underlying state.
   useAdvertiseAgentContext(advertisedContext);
 
+  // Validate on every keystroke — updates error UI only, does NOT fire search.
+  // Search is triggered explicitly by pressing Enter (see keymap above).
   useEffect(() => {
     let isCancelled = false;
 
@@ -301,9 +324,6 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
         } else {
           setErrorMessage("");
           setIsConditionValidState(true);
-          startTransition(() => {
-            onValidCondition(deferredFilterCondition);
-          });
         }
       }
     );
@@ -311,7 +331,19 @@ export function SpanFilterConditionField(props: SpanFilterConditionFieldProps) {
     return () => {
       isCancelled = true;
     };
-  }, [onValidCondition, deferredFilterCondition, projectId]);
+  }, [deferredFilterCondition, projectId]);
+
+  // When the filter is cleared (X button or external reset), immediately
+  // propagate the empty condition so the table resets without requiring Enter.
+  const prevFilterConditionRef = useRef(filterCondition);
+  useEffect(() => {
+    if (filterCondition === "" && prevFilterConditionRef.current !== "") {
+      startTransition(() => {
+        onValidCondition("");
+      });
+    }
+    prevFilterConditionRef.current = filterCondition;
+  }, [filterCondition, onValidCondition]);
 
   const hasError = errorMessage !== "";
   const hasCondition = filterCondition !== "";
